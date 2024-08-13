@@ -43,15 +43,22 @@ class GL:
         # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Polypoint2D
         # você pode assumir inicialmente o desenho dos pontos com a cor emissiva (emissiveColor).
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Polypoint2D : pontos = {0}".format(point)) # imprime no terminal pontos
-        print("Polypoint2D : colors = {0}".format(colors)) # imprime no terminal as cores
+        # # Exemplo:
+        # pos_x = GL.width//2
+        # pos_y = GL.height//2
+        # gpu.GPU.draw_pixel([pos_x, pos_y], gpu.GPU.RGB8, [255, 0, 0])  # altera pixel (u, v, tipo, r, g, b)
+        # # cuidado com as cores, o X3D especifica de (0,1) e o Framebuffer de (0,255)
 
-        # Exemplo:
-        pos_x = GL.width//2
-        pos_y = GL.height//2
-        gpu.GPU.draw_pixel([pos_x, pos_y], gpu.GPU.RGB8, [255, 0, 0])  # altera pixel (u, v, tipo, r, g, b)
-        # cuidado com as cores, o X3D especifica de (0,1) e o Framebuffer de (0,255)
+        try:
+            emissive_color = colors["emissiveColor"]
+        except KeyError:
+            emissive_color = [1.0, 1.0, 1.0]
+        r, g, b = [int(c * 255) for c in emissive_color]
+
+        for i in range(0, len(point), 2):
+            x = int(point[i])
+            y = int(point[i+1])
+            gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, [r, g, b])
         
     @staticmethod
     def polyline2D(lineSegments, colors):
@@ -66,14 +73,32 @@ class GL:
         # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Polyline2D
         # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
 
-        print("Polyline2D : lineSegments = {0}".format(lineSegments)) # imprime no terminal
-        print("Polyline2D : colors = {0}".format(colors)) # imprime no terminal as cores
-        
-        # Exemplo:
-        pos_x = GL.width//2
-        pos_y = GL.height//2
-        gpu.GPU.draw_pixel([pos_x, pos_y], gpu.GPU.RGB8, [255, 0, 255])  # altera pixel (u, v, tipo, r, g, b)
-        # cuidado com as cores, o X3D especifica de (0,1) e o Framebuffer de (0,255)
+        def draw_line(x1, y1, x2, y2, colors):
+            """Função auxiliar para desenhar uma linha."""
+            dist_x = abs(x2 - x1)
+            dist_y = abs(y2 - y1)
+            sx = 1 if x1 < x2 else -1
+            sy = 1 if y1 < y2 else -1
+            delta = dist_x - dist_y
+
+            while True:
+                GL.polypoint2D([x1, y1], colors)
+                if x1 == x2 and y1 == y2:
+                    break
+                delta_2 = 2 * delta
+                if delta_2 > -dist_y:
+                    delta -= dist_y
+                    x1 += sx
+                if delta_2 < dist_x:
+                    delta += dist_x
+                    y1 += sy
+
+        for i in range(0, len(lineSegments), 4):
+            x1 = int(lineSegments[i])
+            y1 = int(lineSegments[i+1])
+            x2 = int(lineSegments[i+2])
+            y2 = int(lineSegments[i+3])
+            draw_line(x1, y1, x2, y2, colors)
 
     @staticmethod
     def circle2D(radius, colors):
@@ -102,12 +127,44 @@ class GL:
         # Já point[2] é a coordenada x do segundo ponto e assim por diante. Assuma que a
         # quantidade de pontos é sempre multiplo de 3, ou seja, 6 valores ou 12 valores, etc.
         # O parâmetro colors é um dicionário com os tipos cores possíveis, para o TriangleSet2D
-        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
-        print("TriangleSet2D : vertices = {0}".format(vertices)) # imprime no terminal
-        print("TriangleSet2D : colors = {0}".format(colors)) # imprime no terminal as cores
+        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor)
+    
+        def area(x1, y1, x2, y2, x3, y3):
+            """Função auxiliar para calcular a área de um triângulo."""
+            return abs((x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2))/2)
 
-        # Exemplo:
-        gpu.GPU.draw_pixel([6, 8], gpu.GPU.RGB8, [255, 255, 0])  # altera pixel (u, v, tipo, r, g, b)
+        def fill_triangle(x1, y1, x2, y2, x3, y3, colors):
+            """Função auxiliar para preencher um triângulo."""
+            x_min = min(x1, x2, x3)
+            x_max = max(x1, x2, x3)
+            y_min = min(y1, y2, y3)
+            y_max = max(y1, y2, y3)
+
+            area_total = area(x1, y1, x2, y2, x3, y3)
+
+            for x in range(x_min, x_max + 1):
+                for y in range(y_min, y_max + 1):
+                    area1 = area(x, y, x2, y2, x3, y3)
+                    area2 = area(x1, y1, x, y, x3, y3)
+                    area3 = area(x1, y1, x2, y2, x, y)
+
+                    if area1 + area2 + area3 == area_total:
+                        GL.polypoint2D([x, y], colors)
+
+        for i in range(0, len(vertices), 6):
+            x1, y1 = int(vertices[i]), int(vertices[i+1])
+            x2, y2 = int(vertices[i+2]), int(vertices[i+3])
+            x3, y3 = int(vertices[i+4]), int(vertices[i+5])
+
+            first_line = [x1, y1, x2, y2]
+            second_line = [x2, y2, x3, y3]
+            third_line = [x3, y3, x1, y1]
+            lineSegments = first_line + second_line + third_line
+            GL.polyline2D(lineSegments, colors)
+
+            fill_triangle(x1, y1, x2, y2, x3, y3, colors)
+
+
 
 
     @staticmethod

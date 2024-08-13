@@ -22,7 +22,6 @@ import matplotlib.patheffects as path_effects
 
 class Interface:
     """Interface para usuário/desenvolvedor verificar resultados da renderização."""
-
     pontos = []        # pontos a serem desenhados
     linhas = []        # linhas a serem desenhadas
     circulos = []      # circulos a serem desenhados
@@ -229,4 +228,7 @@ class Interface:
             time_box = TextBox(time_box_pos, 'FPS ', initial="0.0")
             _ = animation.FuncAnimation(self.fig, animate, interval=1, blit=False)
 
+
+        plt.savefig('resultado.png')
+        print("Imagem salva como resultado.png")    
         plt.show()
