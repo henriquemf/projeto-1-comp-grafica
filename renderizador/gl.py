@@ -165,28 +165,74 @@ class GL:
 
     @staticmethod
     def triangleSet(point, colors):
-        """Função usada para renderizar TriangleSet."""
-        # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
-        # de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x do
-        # primeiro ponto, point[1] o valor y do primeiro ponto, point[2] o valor z da
-        # coordenada z do primeiro ponto. Já point[3] é a coordenada x do segundo ponto e
-        # assim por diante.
-        # No TriangleSet os triângulos são informados individualmente, assim os três
-        # primeiros pontos definem um triângulo, os três próximos pontos definem um novo
-        # triângulo, e assim por diante.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, você pode assumir
-        # inicialmente, para o TriangleSet, o desenho das linhas com a cor emissiva
-        # (emissiveColor), conforme implementar novos materias você deverá suportar outros
-        # tipos de cores.
+        """Render a set of 3D triangles."""
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("TriangleSet : pontos = {0}".format(point))  # imprime no terminal pontos
-        print(
-            "TriangleSet : colors = {0}".format(colors)
-        )  # imprime no terminal as cores
+        def insideTri(x, y, p1, p2, p3):
+            """Check if the point (x, y) is inside the triangle defined by p1, p2, p3."""
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+            def edge_fn(v1, v2, p):
+                return (p[0] - v2[0]) * (v1[1] - v2[1]) - (p[1] - v2[1]) * (
+                    v1[0] - v2[0]
+                )
+
+            b1 = edge_fn(p1, p2, [x, y]) < 0.0
+            b2 = edge_fn(p2, p3, [x, y]) < 0.0
+            b3 = edge_fn(p3, p1, [x, y]) < 0.0
+
+            return (b1 == b2) and (b2 == b3)
+
+        def transform_points(points, screen_matrix):
+            """Transform 3D points to 2D screen coordinates."""
+            transformed_points = []
+
+            for i in range(0, len(points), 3):
+                p = np.array([points[i], points[i + 1], points[i + 2], 1.0])
+
+                # Apply perspective, model, view transformations
+                p = GL.perspective_matrix @ GL.transform_stack[-1] @ p
+                p = p / p[-1]  # Perform perspective division
+
+                # Transform to screen coordinates
+                p = screen_matrix @ p
+
+                transformed_points.append(p[0])
+                transformed_points.append(p[1])
+
+            return transformed_points
+
+        # Set color
+        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
+
+        # Get the screen transformation matrix
+        w, h = GL.width, GL.height
+        screen_matrix = np.array(
+            [[w / 2, 0, 0, w / 2], [0, -h / 2, 0, h / 2], [0, 0, 1, 0], [0, 0, 0, 1]]
+        )
+
+        # Transform points to 2D screen space
+        vertices = transform_points(point, screen_matrix)
+
+        # Iterate through each triangle (6 values per triangle)
+        for i in range(0, len(vertices), 6):
+            p1 = [vertices[i], vertices[i + 1]]
+            p2 = [vertices[i + 2], vertices[i + 3]]
+            p3 = [vertices[i + 4], vertices[i + 5]]
+
+            # Compute bounding box for the triangle
+            x_min, x_max = int(min(p1[0], p2[0], p3[0])), int(max(p1[0], p2[0], p3[0]))
+            y_min, y_max = int(min(p1[1], p2[1], p3[1])), int(max(p1[1], p2[1], p3[1]))
+
+            # Clamp bounding box to screen dimensions
+            x_min = max(0, x_min)
+            x_max = min(GL.width - 1, x_max)
+            y_min = max(0, y_min)
+            y_max = min(GL.height - 1, y_max)
+
+            # Fill the triangle by iterating over the bounding box
+            for x in range(x_min, x_max + 1):
+                for y in range(y_min, y_max + 1):
+                    if insideTri(x + 0.5, y + 0.5, p1, p2, p3):
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color)
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -270,26 +316,66 @@ class GL:
 
     @staticmethod
     def transform_in(translation, scale, rotation):
-        """Função usada para renderizar (na verdade coletar os dados) de Transform."""
-        # A função transform_in será chamada quando se entrar em um nó X3D do tipo Transform
-        # do grafo de cena. Os valores passados são a escala em um vetor [x, y, z]
-        # indicando a escala em cada direção, a translação [x, y, z] nas respectivas
-        # coordenadas e finalmente a rotação por [x, y, z, t] sendo definida pela rotação
-        # do objeto ao redor do eixo x, y, z por t radianos, seguindo a regra da mão direita.
-        # Quando se entrar em um nó transform se deverá salvar a matriz de transformação dos
-        # modelos do mundo em alguma estrutura de pilha.
+        """Applies the translation, rotation, and scale transformations to the model matrix."""
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Transform : ", end="")
-        if translation:
-            print(
-                "translation = {0} ".format(translation), end=""
-            )  # imprime no terminal
-        if scale:
-            print("scale = {0} ".format(scale), end="")  # imprime no terminal
-        if rotation:
-            print("rotation = {0} ".format(rotation), end="")  # imprime no terminal
-        print("")
+        # Scale matrix
+        scale_m = np.array(
+            [
+                [scale[0], 0.0, 0.0, 0.0],
+                [0.0, scale[1], 0.0, 0.0],
+                [0.0, 0.0, scale[2], 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+
+        # Translation matrix
+        translation_m = np.array(
+            [
+                [1.0, 0.0, 0.0, translation[0]],
+                [0.0, 1.0, 0.0, translation[1]],
+                [0.0, 0.0, 1.0, translation[2]],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+
+        # Rotation matrix
+        x, y, z, t = rotation
+        cos_t = np.cos(t)
+        sin_t = np.sin(t)
+        one_minus_cos_t = 1 - cos_t
+
+        rotation_m = np.array(
+            [
+                [
+                    cos_t + x * x * one_minus_cos_t,
+                    x * y * one_minus_cos_t - z * sin_t,
+                    x * z * one_minus_cos_t + y * sin_t,
+                    0,
+                ],
+                [
+                    y * x * one_minus_cos_t + z * sin_t,
+                    cos_t + y * y * one_minus_cos_t,
+                    y * z * one_minus_cos_t - x * sin_t,
+                    0,
+                ],
+                [
+                    z * x * one_minus_cos_t - y * sin_t,
+                    z * y * one_minus_cos_t + x * sin_t,
+                    cos_t + z * z * one_minus_cos_t,
+                    0,
+                ],
+                [0, 0, 0, 1],
+            ]
+        )
+
+        # Combine transformations: Translate -> Rotate -> Scale
+        object_to_world_m = translation_m @ rotation_m @ scale_m
+
+        # Debugging print statement (can be removed in production)
+        print("Model Matrix:\n", object_to_world_m)
+
+        # Append the transformation to the stack
+        GL.transform_stack.append(object_to_world_m)
 
     @staticmethod
     def transform_out():
