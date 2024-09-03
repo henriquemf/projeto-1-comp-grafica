@@ -126,49 +126,42 @@ class GL:
 
     @staticmethod
     def triangleSet2D(vertices, colors):
-        """Função usada para renderizar TriangleSet2D."""
-        # Nessa função você receberá os vertices de um triângulo no parâmetro vertices,
-        # esses pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o
-        # valor da coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto.
-        # Já point[2] é a coordenada x do segundo ponto e assim por diante. Assuma que a
-        # quantidade de pontos é sempre multiplo de 3, ou seja, 6 valores ou 12 valores, etc.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o TriangleSet2D
-        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor)
+        """Render a 2D TriangleSet."""
 
-        def area(x1, y1, x2, y2, x3, y3):
-            """Função auxiliar para calcular a área de um triângulo."""
-            return abs((x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) / 2)
+        def sign(x):
+            return (x > 0) - (x < 0)
 
-        def fill_triangle(x1, y1, x2, y2, x3, y3, colors):
-            """Função auxiliar para preencher um triângulo."""
-            x_min = min(x1, x2, x3)
-            x_max = max(x1, x2, x3)
-            y_min = min(y1, y2, y3)
-            y_max = max(y1, y2, y3)
+        def insideTri(x, y, p1, p2, p3):
+            d1 = sign((x - p2[0]) * (p1[1] - p2[1]) - (y - p2[1]) * (p1[0] - p2[0]))
+            d2 = sign((x - p3[0]) * (p2[1] - p3[1]) - (y - p3[1]) * (p2[0] - p3[0]))
+            d3 = sign((x - p1[0]) * (p3[1] - p1[1]) - (y - p1[1]) * (p3[0] - p1[0]))
+            return (d1 == d2) and (d2 == d3)
 
-            area_total = area(x1, y1, x2, y2, x3, y3)
+        if len(vertices) < 6:
+            raise ValueError("Invalid triangle vertex data.")
 
-            for x in range(x_min, x_max + 1):
-                for y in range(y_min, y_max + 1):
-                    area1 = area(x, y, x2, y2, x3, y3)
-                    area2 = area(x1, y1, x, y, x3, y3)
-                    area3 = area(x1, y1, x2, y2, x, y)
-
-                    if area1 + area2 + area3 == area_total:
-                        GL.polypoint2D([x, y], colors)
+        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
 
         for i in range(0, len(vertices), 6):
-            x1, y1 = int(vertices[i]), int(vertices[i + 1])
-            x2, y2 = int(vertices[i + 2]), int(vertices[i + 3])
-            x3, y3 = int(vertices[i + 4]), int(vertices[i + 5])
+            p1 = (vertices[i], vertices[i + 1])
+            p2 = (vertices[i + 2], vertices[i + 3])
+            p3 = (vertices[i + 4], vertices[i + 5])
 
-            first_line = [x1, y1, x2, y2]
-            second_line = [x2, y2, x3, y3]
-            third_line = [x3, y3, x1, y1]
-            lineSegments = first_line + second_line + third_line
-            GL.polyline2D(lineSegments, colors)
+            # Compute bounding box
+            x_min, x_max = int(min(p1[0], p2[0], p3[0])), int(max(p1[0], p2[0], p3[0]))
+            y_min, y_max = int(min(p1[1], p2[1], p3[1])), int(max(p1[1], p2[1], p3[1]))
 
-            fill_triangle(x1, y1, x2, y2, x3, y3, colors)
+            # Clamp bounding box to screen dimensions
+            x_min = max(0, x_min)
+            x_max = min(GL.width - 1, x_max)
+            y_min = max(0, y_min)
+            y_max = min(GL.height - 1, y_max)
+
+            # Iterate over the bounding box
+            for x in range(x_min, x_max + 1):
+                for y in range(y_min, y_max + 1):
+                    if insideTri(x + 0.5, y + 0.5, p1, p2, p3):
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color)
 
     @staticmethod
     def triangleSet(point, colors):
