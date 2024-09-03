@@ -190,16 +190,83 @@ class GL:
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
-        """Função usada para renderizar (na verdade coletar os dados) de Viewpoint."""
-        # Na função de viewpoint você receberá a posição, orientação e campo de visão da
-        # câmera virtual. Use esses dados para poder calcular e criar a matriz de projeção
-        # perspectiva para poder aplicar nos pontos dos objetos geométricos.
+        """Sets up the view and projection matrices."""
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Viewpoint : ", end="")
-        print("position = {0} ".format(position), end="")
-        print("orientation = {0} ".format(orientation), end="")
-        print("fieldOfView = {0} ".format(fieldOfView))
+        # Extracting components for readability
+        x, y, z = orientation[:3]
+        t = orientation[3]
+
+        # Precompute sin and cos for efficiency
+        cos_t = np.cos(t)
+        sin_t = np.sin(t)
+        one_minus_cos_t = 1 - cos_t
+
+        # Rotation matrix for arbitrary axis (orientation vector)
+        rotation_m = np.array(
+            [
+                [
+                    cos_t + x * x * one_minus_cos_t,
+                    x * y * one_minus_cos_t - z * sin_t,
+                    x * z * one_minus_cos_t + y * sin_t,
+                    0,
+                ],
+                [
+                    y * x * one_minus_cos_t + z * sin_t,
+                    cos_t + y * y * one_minus_cos_t,
+                    y * z * one_minus_cos_t - x * sin_t,
+                    0,
+                ],
+                [
+                    z * x * one_minus_cos_t - y * sin_t,
+                    z * y * one_minus_cos_t + x * sin_t,
+                    cos_t + z * z * one_minus_cos_t,
+                    0,
+                ],
+                [0, 0, 0, 1],
+            ]
+        )
+
+        # Translation matrix (camera position)
+        translate_m = np.array(
+            [
+                [1.0, 0.0, 0.0, -position[0]],
+                [0.0, 1.0, 0.0, -position[1]],
+                [0.0, 0.0, 1.0, -position[2]],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+
+        # LookAt matrix: Rotate first, then translate
+        look_at_matrix = rotation_m @ translate_m
+
+        # Perspective projection matrix
+        aspect_ratio = GL.width / GL.height
+        near = GL.near
+        far = GL.far
+        top = near * np.tan(fieldOfView / 2)
+        right = top * aspect_ratio
+
+        perspective_m = np.array(
+            [
+                [near / right, 0.0, 0.0, 0.0],
+                [0.0, near / top, 0.0, 0.0],
+                [
+                    0.0,
+                    0.0,
+                    -(far + near) / (far - near),
+                    -2.0 * far * near / (far - near),
+                ],
+                [0.0, 0.0, -1.0, 0.0],
+            ]
+        )
+
+        # Final matrix that combines LookAt and Perspective
+        GL.perspective_matrix = perspective_m @ look_at_matrix
+
+        # Optionally print matrices for debugging
+        print("LookAt Matrix:\n", look_at_matrix)
+        print("Perspective Matrix:\n", perspective_m)
+        print("Combined Matrix:\n", GL.perspective_matrix)
 
     @staticmethod
     def transform_in(translation, scale, rotation):
