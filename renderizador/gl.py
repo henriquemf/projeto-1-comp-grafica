@@ -40,6 +40,7 @@ class GL:
     @staticmethod
     def polypoint2D(point, colors):
         """Função usada para renderizar Polypoint2D."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#Polypoint2D
         # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
         # de pontos x, y sempre na ordem. Assim point[0] é o valor da coordenada x do
         # primeiro ponto, point[1] o valor y do primeiro ponto. Já point[2] é a
@@ -68,6 +69,7 @@ class GL:
     @staticmethod
     def polyline2D(lineSegments, colors):
         """Função usada para renderizar Polyline2D."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#Polyline2D
         # Nessa função você receberá os pontos de uma linha no parâmetro lineSegments, esses
         # pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o valor da
         # coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto. Já point[2] é
@@ -108,6 +110,7 @@ class GL:
     @staticmethod
     def circle2D(radius, colors):
         """Função usada para renderizar Circle2D."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#Circle2D
         # Nessa função você receberá um valor de raio e deverá desenhar o contorno de
         # um círculo.
         # O parâmetro colors é um dicionário com os tipos cores possíveis, para o Circle2D
@@ -126,7 +129,19 @@ class GL:
 
     @staticmethod
     def triangleSet2D(vertices, colors):
-        """Render a 2D TriangleSet."""
+        """Função usada para renderizar TriangleSet2D."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#TriangleSet2D
+        # Nessa função você receberá os vertices de um triângulo no parâmetro vertices,
+        # esses pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o
+        # valor da coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto.
+        # Já point[2] é a coordenada x do segundo ponto e assim por diante. Assuma que a
+        # quantidade de pontos é sempre multiplo de 3, ou seja, 6 valores ou 12 valores, etc.
+        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o TriangleSet2D
+        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
+        print("TriangleSet2D : vertices = {0}".format(vertices))  # imprime no terminal
+        print(
+            "TriangleSet2D : colors = {0}".format(colors)
+        )  # imprime no terminal as cores
 
         def sign(x):
             return (x > 0) - (x < 0)
@@ -165,7 +180,20 @@ class GL:
 
     @staticmethod
     def triangleSet(point, colors):
-        """Render a set of 3D triangles."""
+        """Função usada para renderizar TriangleSet."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#TriangleSet
+        # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
+        # de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x do
+        # primeiro ponto, point[1] o valor y do primeiro ponto, point[2] o valor z da
+        # coordenada z do primeiro ponto. Já point[3] é a coordenada x do segundo ponto e
+        # assim por diante.
+        # No TriangleSet os triângulos são informados individualmente, assim os três
+        # primeiros pontos definem um triângulo, os três próximos pontos definem um novo
+        # triângulo, e assim por diante.
+        # O parâmetro colors é um dicionário com os tipos cores possíveis, você pode assumir
+        # inicialmente, para o TriangleSet, o desenho das linhas com a cor emissiva
+        # (emissiveColor), conforme implementar novos materias você deverá suportar outros
+        # tipos de cores.
 
         def insideTri(x, y, p1, p2, p3):
             """Check if the point (x, y) is inside the triangle defined by p1, p2, p3."""
@@ -316,7 +344,16 @@ class GL:
 
     @staticmethod
     def transform_in(translation, scale, rotation):
-        """Applies the translation, rotation, and scale transformations to the model matrix."""
+        """Função usada para renderizar (na verdade coletar os dados) de Transform."""
+        # A função transform_in será chamada quando se entrar em um nó X3D do tipo Transform
+        # do grafo de cena. Os valores passados são a escala em um vetor [x, y, z]
+        # indicando a escala em cada direção, a translação [x, y, z] nas respectivas
+        # coordenadas e finalmente a rotação por [x, y, z, t] sendo definida pela rotação
+        # do objeto ao redor do eixo x, y, z por t radianos, seguindo a regra da mão direita.
+        # Quando se entrar em um nó transform se deverá salvar a matriz de transformação dos
+        # modelos do mundo para depois potencialmente usar em outras chamadas.
+        # Quando começar a usar Transforms dentre de outros Transforms, mais a frente no curso
+        # Você precisará usar alguma estrutura de dados pilha para organizar as matrizes.
 
         # Scale matrix
         scale_m = np.array(
@@ -391,6 +428,7 @@ class GL:
     @staticmethod
     def triangleStripSet(point, stripCount, colors):
         """Função usada para renderizar TriangleStripSet."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#TriangleStripSet
         # A função triangleStripSet é usada para desenhar tiras de triângulos interconectados,
         # você receberá as coordenadas dos pontos no parâmetro point, esses pontos são uma
         # lista de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x
@@ -417,6 +455,7 @@ class GL:
     @staticmethod
     def indexedTriangleStripSet(point, index, colors):
         """Função usada para renderizar IndexedTriangleStripSet."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#IndexedTriangleStripSet
         # A função indexedTriangleStripSet é usada para desenhar tiras de triângulos
         # interconectados, você receberá as coordenadas dos pontos no parâmetro point, esses
         # pontos são uma lista de pontos x, y, e z sempre na ordem. Assim point[0] é o valor
@@ -470,6 +509,7 @@ class GL:
         current_texture,
     ):
         """Função usada para renderizar IndexedFaceSet."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#IndexedFaceSet
         # A função indexedFaceSet é usada para desenhar malhas de triângulos. Ela funciona de
         # forma muito simular a IndexedTriangleStripSet porém com mais recursos.
         # Você receberá as coordenadas dos pontos no parâmetro cord, esses
@@ -514,8 +554,27 @@ class GL:
         gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
 
     @staticmethod
+    def box(size, colors):
+        """Função usada para renderizar Boxes."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#Box
+        # A função box é usada para desenhar paralelepípedos na cena. O Box é centrada no
+        # (0, 0, 0) no sistema de coordenadas local e alinhado com os eixos de coordenadas
+        # locais. O argumento size especifica as extensões da caixa ao longo dos eixos X, Y
+        # e Z, respectivamente, e cada valor do tamanho deve ser maior que zero. Para desenha
+        # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
+        # encontre os vértices e defina os triângulos.
+
+        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
+        print("Box : size = {0}".format(size))  # imprime no terminal pontos
+        print("Box : colors = {0}".format(colors))  # imprime no terminal as cores
+
+        # Exemplo de desenho de um pixel branco na coordenada 10, 10
+        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+
+    @staticmethod
     def sphere(radius, colors):
         """Função usada para renderizar Esferas."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#Sphere
         # A função sphere é usada para desenhar esferas na cena. O esfera é centrada no
         # (0, 0, 0) no sistema de coordenadas local. O argumento radius especifica o
         # raio da esfera que está sendo criada. Para desenha essa esfera você vai
@@ -531,6 +590,7 @@ class GL:
     @staticmethod
     def navigationInfo(headlight):
         """Características físicas do avatar do visualizador e do modelo de visualização."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/navigation.html#NavigationInfo
         # O campo do headlight especifica se um navegador deve acender um luz direcional que
         # sempre aponta na direção que o usuário está olhando. Definir este campo como TRUE
         # faz com que o visualizador forneça sempre uma luz do ponto de vista do usuário.
@@ -545,6 +605,7 @@ class GL:
     @staticmethod
     def directionalLight(ambientIntensity, color, intensity, direction):
         """Luz direcional ou paralela."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/lighting.html#DirectionalLight
         # Define uma fonte de luz direcional que ilumina ao longo de raios paralelos
         # em um determinado vetor tridimensional. Possui os campos básicos ambientIntensity,
         # cor, intensidade. O campo de direção especifica o vetor de direção da iluminação
@@ -564,6 +625,7 @@ class GL:
     @staticmethod
     def pointLight(ambientIntensity, color, intensity, location):
         """Luz pontual."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/lighting.html#PointLight
         # Fonte de luz pontual em um local 3D no sistema de coordenadas local. Uma fonte
         # de luz pontual emite luz igualmente em todas as direções; ou seja, é omnidirecional.
         # Possui os campos básicos ambientIntensity, cor, intensidade. Um nó PointLight ilumina
@@ -579,6 +641,7 @@ class GL:
     @staticmethod
     def fog(visibilityRange, color):
         """Névoa."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/environmentalEffects.html#Fog
         # O nó Fog fornece uma maneira de simular efeitos atmosféricos combinando objetos
         # com a cor especificada pelo campo de cores com base nas distâncias dos
         # vários objetos ao visualizador. A visibilidadeRange especifica a distância no
@@ -594,6 +657,7 @@ class GL:
     @staticmethod
     def timeSensor(cycleInterval, loop):
         """Gera eventos conforme o tempo passa."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/time.html#TimeSensor
         # Os nós TimeSensor podem ser usados para muitas finalidades, incluindo:
         # Condução de simulações e animações contínuas; Controlar atividades periódicas;
         # iniciar eventos de ocorrência única, como um despertador;
@@ -621,6 +685,7 @@ class GL:
     @staticmethod
     def splinePositionInterpolator(set_fraction, key, keyValue, closed):
         """Interpola não linearmente entre uma lista de vetores 3D."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/interpolators.html#SplinePositionInterpolator
         # Interpola não linearmente entre uma lista de vetores 3D. O campo keyValue possui
         # uma lista com os valores a serem interpolados, key possui uma lista respectiva de chaves
         # dos valores em keyValue, a fração a ser interpolada vem de set_fraction que varia de
@@ -645,6 +710,7 @@ class GL:
     @staticmethod
     def orientationInterpolator(set_fraction, key, keyValue):
         """Interpola entre uma lista de valores de rotação especificos."""
+        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/interpolators.html#OrientationInterpolator
         # Interpola rotações são absolutas no espaço do objeto e, portanto, não são cumulativas.
         # Uma orientação representa a posição final de um objeto após a aplicação de uma rotação.
         # Um OrientationInterpolator interpola entre duas orientações calculando o caminho mais
