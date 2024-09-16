@@ -417,8 +417,8 @@ class GL:
         # deverá recuperar a matriz de transformação dos modelos do mundo da estrutura de
         # pilha implementada.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Saindo de Transform")
+        if len(GL.transform_stack) > 1:
+            GL.transform_stack.pop()
 
     @staticmethod
     def triangleStripSet(point, stripCount, colors):
