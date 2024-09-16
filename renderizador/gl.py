@@ -531,16 +531,41 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
-        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
+        def split_faces(indices):
+            """Splits the index list into separate faces based on the `-1` delimiter."""
+            faces = []
+            current_face = []
 
-        vertices = []
-        for i in coordIndex:
-            if i == -1:
-                if len(vertices) >= 3:
-                    GL.triangleSet(vertices, colors)
-                vertices = []
-            else:
-                vertices.extend(coord[i * 3 : (i + 1) * 3])
+            for i in indices:
+                if i == -1:
+                    if current_face:
+                        faces.append(current_face)
+                    current_face = []
+                else:
+                    current_face.append(i)
+
+            if current_face:
+                faces.append(current_face)
+
+            return faces
+
+        def generate_strips(faces):
+            """Generates triangle strips from a list of faces."""
+            strips = []
+
+            for face in faces:
+                if len(face) >= 3:
+                    strips.extend(
+                        [face[0], face[i], face[i + 1], -1]
+                        for i in range(1, len(face) - 1)
+                    )
+
+            return [index for strip in strips for index in strip]
+
+        faces = split_faces(coordIndex)
+        strip_indices = generate_strips(faces)
+
+        GL.indexedTriangleStripSet(coord, strip_indices, colors)
 
     @staticmethod
     def box(size, colors):
