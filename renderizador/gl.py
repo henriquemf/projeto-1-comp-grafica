@@ -469,16 +469,22 @@ class GL:
         # depois 2, 3 e 4, e assim por diante. Cuidado com a orientação dos vértices, ou seja,
         # todos no sentido horário ou todos no sentido anti-horário, conforme especificado.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print(
-            "IndexedTriangleStripSet : pontos = {0}, index = {1}".format(point, index)
-        )
-        print(
-            "IndexedTriangleStripSet : colors = {0}".format(colors)
-        )  # imprime as cores
+        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+        idx = 0
+        strip = []
+        while idx < len(index):
+            if index[idx] == -1:
+                if len(strip) >= 3:
+                    for i in range(2, len(strip)):
+                        p1 = point[strip[i - 2] * 3 : (strip[i - 2] + 1) * 3]
+                        p2 = point[strip[i - 1] * 3 : (strip[i - 1] + 1) * 3]
+                        p3 = point[strip[i] * 3 : (strip[i] + 1) * 3]
+                        GL.triangleSet(p1 + p2 + p3, colors)
+                strip = []
+            else:
+                strip.append(index[idx])
+            idx += 1
 
     @staticmethod
     def box(size, colors):
