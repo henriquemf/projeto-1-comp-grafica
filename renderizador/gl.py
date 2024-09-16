@@ -536,29 +536,16 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
-        # Os prints abaixo são só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("IndexedFaceSet : ")
-        if coord:
-            print("\tpontos(x, y, z) = {0}, coordIndex = {1}".format(coord, coordIndex))
-        print("colorPerVertex = {0}".format(colorPerVertex))
-        if colorPerVertex and color and colorIndex:
-            print("\tcores(r, g, b) = {0}, colorIndex = {1}".format(color, colorIndex))
-        if texCoord and texCoordIndex:
-            print(
-                "\tpontos(u, v) = {0}, texCoordIndex = {1}".format(
-                    texCoord, texCoordIndex
-                )
-            )
-        if current_texture:
-            image = gpu.GPU.load_texture(current_texture[0])
-            print("\t Matriz com image = {0}".format(image))
-            print("\t Dimensões da image = {0}".format(image.shape))
-        print(
-            "IndexedFaceSet : colors = {0}".format(colors)
-        )  # imprime no terminal as cores
+        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+        vertices = []
+        for i in coordIndex:
+            if i == -1:
+                if len(vertices) >= 3:
+                    GL.triangleSet(vertices, colors)
+                vertices = []
+            else:
+                vertices.extend(coord[i * 3 : (i + 1) * 3])
 
     @staticmethod
     def box(size, colors):
