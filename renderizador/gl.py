@@ -355,32 +355,30 @@ class GL:
         # Quando começar a usar Transforms dentre de outros Transforms, mais a frente no curso
         # Você precisará usar alguma estrutura de dados pilha para organizar as matrizes.
 
-        # Scale matrix
         scale_m = np.array(
             [
-                [scale[0], 0.0, 0.0, 0.0],
-                [0.0, scale[1], 0.0, 0.0],
-                [0.0, 0.0, scale[2], 0.0],
-                [0.0, 0.0, 0.0, 1.0],
+                [scale[0], 0, 0, 0],
+                [0, scale[1], 0, 0],
+                [0, 0, scale[2], 0],
+                [0, 0, 0, 1],
             ]
         )
 
-        # Translation matrix
+        # Matriz de translação
         translation_m = np.array(
             [
-                [1.0, 0.0, 0.0, translation[0]],
-                [0.0, 1.0, 0.0, translation[1]],
-                [0.0, 0.0, 1.0, translation[2]],
-                [0.0, 0.0, 0.0, 1.0],
+                [1, 0, 0, translation[0]],
+                [0, 1, 0, translation[1]],
+                [0, 0, 1, translation[2]],
+                [0, 0, 0, 1],
             ]
         )
 
-        # Rotation matrix
+        # Matriz de rotação
         x, y, z, t = rotation
         cos_t = np.cos(t)
         sin_t = np.sin(t)
         one_minus_cos_t = 1 - cos_t
-
         rotation_m = np.array(
             [
                 [
@@ -405,14 +403,11 @@ class GL:
             ]
         )
 
-        # Combine transformations: Translate -> Rotate -> Scale
-        object_to_world_m = translation_m @ rotation_m @ scale_m
+        # Combina as transformações
+        transformation_m = translation_m @ rotation_m @ scale_m
 
-        # Debugging print statement (can be removed in production)
-        print("Model Matrix:\n", object_to_world_m)
-
-        # Append the transformation to the stack
-        GL.transform_stack.append(object_to_world_m)
+        # Empilha a nova transformação
+        GL.transform_stack.append(GL.transform_stack[-1] @ transformation_m)
 
     @staticmethod
     def transform_out():
