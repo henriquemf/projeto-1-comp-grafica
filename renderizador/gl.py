@@ -29,6 +29,63 @@ class GL:
     transformation_matrix = np.identity(4)
     transform_stack = [np.identity(4)]
 
+    z_buffer = np.full((width, height), np.inf)
+    framebuffer = np.zeros((width, height, 3), dtype=np.uint8)
+
+    current_texture = None
+    current_tex_coords = []
+
+    @staticmethod
+    def calculate_mipmap_level(v0, v1, v2, t0, t1, t2, texture):
+        def triangle_area(edge1, edge2):
+            return 0.5 * np.abs(edge1[0] * edge2[1] - edge1[1] * edge2[0])
+
+        edge1 = np.subtract(v1[:2], v0[:2])
+        edge2 = np.subtract(v2[:2], v0[:2])
+
+        tex_edge1 = np.subtract(t1[:2], t0[:2])
+        tex_edge2 = np.subtract(t2[:2], t0[:2])
+
+        screen_area = triangle_area(edge1, edge2)
+        tex_area = triangle_area(tex_edge1, tex_edge2)
+
+        if tex_area <= 0:
+            return 0
+
+        ratio = screen_area / tex_area
+        level = max(0, min(int(np.log2(ratio)), len(texture) - 1))
+
+        return level
+
+    @staticmethod
+    def get_texture_color(texture, u, v, level):
+        h, w, _ = texture.shape
+
+        u = u % 1.0
+        v = v % 1.0
+
+        x = int(u * (w - 1))
+        y = int(v * (h - 1))
+
+        color = texture[y, x] / 255.0
+        return color
+
+    @staticmethod
+    def draw_pixel(coord, depth, color, transparency):
+        x, y = coord
+
+        if 0 <= x < GL.width and 0 <= y < GL.height:
+            if depth < GL.z_buffer[x, y]:
+                GL.z_buffer[x, y] = depth
+                existing_color = GL.framebuffer[x, y] / 255.0
+                new_color = np.array(color) / 255.0
+                final_color = (
+                    1 - transparency
+                ) * new_color + transparency * existing_color
+                final_color = np.clip(final_color, 0.0, 1.0)
+                GL.framebuffer[x, y] = (final_color * 255).astype(np.uint8)
+                gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, GL.framebuffer[x, y])
+
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
@@ -142,41 +199,56 @@ class GL:
         print(
             "TriangleSet2D : colors = {0}".format(colors)
         )  # imprime no terminal as cores
+        ss_factor = 2
+        ss_width = GL.width * ss_factor
+        ss_height = GL.height * ss_factor
+        ss_framebuffer = np.zeros((ss_height, ss_width, 3), dtype=np.float32)
 
-        def sign(x):
-            return (x > 0) - (x < 0)
-
-        def insideTri(x, y, p1, p2, p3):
-            d1 = sign((x - p2[0]) * (p1[1] - p2[1]) - (y - p2[1]) * (p1[0] - p2[0]))
-            d2 = sign((x - p3[0]) * (p2[1] - p3[1]) - (y - p3[1]) * (p2[0] - p3[0]))
-            d3 = sign((x - p1[0]) * (p3[1] - p1[1]) - (y - p1[1]) * (p3[0] - p1[0]))
-            return (d1 == d2) and (d2 == d3)
-
-        if len(vertices) < 6:
-            raise ValueError("Invalid triangle vertex data.")
-
-        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
+        def edge_intersect_y(y, p0, p1):
+            if p0[1] == p1[1]:
+                return None
+            if p0[1] > p1[1]:
+                p0, p1 = p1, p0
+            if not (p0[1] <= y <= p1[1]):
+                return None
+            t = (y - p0[1]) / (p1[1] - p0[1])
+            return p0[0] + t * (p1[0] - p0[0])
 
         for i in range(0, len(vertices), 6):
-            p1 = (vertices[i], vertices[i + 1])
-            p2 = (vertices[i + 2], vertices[i + 3])
-            p3 = (vertices[i + 4], vertices[i + 5])
+            v0 = [coord * ss_factor for coord in vertices[i : i + 2]]
+            v1 = [coord * ss_factor for coord in vertices[i + 2 : i + 4]]
+            v2 = [coord * ss_factor for coord in vertices[i + 4 : i + 6]]
 
-            # Compute bounding box
-            x_min, x_max = int(min(p1[0], p2[0], p3[0])), int(max(p1[0], p2[0], p3[0]))
-            y_min, y_max = int(min(p1[1], p2[1], p3[1])), int(max(p1[1], p2[1], p3[1]))
+            min_y = int(min(v0[1], v1[1], v2[1]))
+            max_y = int(max(v0[1], v1[1], v2[1]))
 
-            # Clamp bounding box to screen dimensions
-            x_min = max(0, x_min)
-            x_max = min(GL.width - 1, x_max)
-            y_min = max(0, y_min)
-            y_max = min(GL.height - 1, y_max)
+            for y in range(min_y, max_y + 1):
+                intersections = []
+                for p0, p1 in [(v0, v1), (v1, v2), (v2, v0)]:
+                    x_intersect = edge_intersect_y(y, p0, p1)
+                    if x_intersect is not None:
+                        intersections.append(x_intersect)
 
-            # Iterate over the bounding box
-            for x in range(x_min, x_max + 1):
-                for y in range(y_min, y_max + 1):
-                    if insideTri(x + 0.5, y + 0.5, p1, p2, p3):
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color)
+                if len(intersections) >= 2:
+                    intersections.sort()
+                    x_start = int(intersections[0])
+                    x_end = int(intersections[1])
+
+                    for x in range(x_start, x_end + 1):
+                        if 0 <= x < ss_width and 0 <= y < ss_height:
+                            ss_framebuffer[y, x] = colors["emissiveColor"]
+
+        for y in range(GL.height):
+            for x in range(GL.width):
+                color_sum = np.zeros(3)
+                for dy in range(ss_factor):
+                    for dx in range(ss_factor):
+                        ss_x = min(x * ss_factor + dx, ss_width - 1)
+                        ss_y = min(y * ss_factor + dy, ss_height - 1)
+                        color_sum += ss_framebuffer[ss_y, ss_x]
+
+                avg_color = (color_sum / (ss_factor * ss_factor)) * 255
+                gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, avg_color.astype(int).tolist())
 
     @staticmethod
     def triangleSet(point, colors):
@@ -195,72 +267,128 @@ class GL:
         # (emissiveColor), conforme implementar novos materias você deverá suportar outros
         # tipos de cores.
 
-        def insideTri(x, y, p1, p2, p3):
-            """Check if the point (x, y) is inside the triangle defined by p1, p2, p3."""
-
-            def edge_fn(v1, v2, p):
-                return (p[0] - v2[0]) * (v1[1] - v2[1]) - (p[1] - v2[1]) * (
-                    v1[0] - v2[0]
-                )
-
-            b1 = edge_fn(p1, p2, [x, y]) < 0.0
-            b2 = edge_fn(p2, p3, [x, y]) < 0.0
-            b3 = edge_fn(p3, p1, [x, y]) < 0.0
-
-            return (b1 == b2) and (b2 == b3)
-
-        def transform_points(points, screen_matrix):
-            """Transform 3D points to 2D screen coordinates."""
-            transformed_points = []
-
-            for i in range(0, len(points), 3):
-                p = np.array([points[i], points[i + 1], points[i + 2], 1.0])
-
-                # Apply perspective, model, view transformations
-                p = GL.perspective_matrix @ GL.transform_stack[-1] @ p
-                p = p / p[-1]  # Perform perspective division
-
-                # Transform to screen coordinates
-                p = screen_matrix @ p
-
-                transformed_points.append(p[0])
-                transformed_points.append(p[1])
-
-            return transformed_points
-
-        # Set color
-        color = np.array(colors.get("emissiveColor", [1.0, 1.0, 1.0])) * 255
-
-        # Get the screen transformation matrix
-        w, h = GL.width, GL.height
+        w, h = GL.width - 1, GL.height - 1
         screen_matrix = np.array(
             [[w / 2, 0, 0, w / 2], [0, -h / 2, 0, h / 2], [0, 0, 1, 0], [0, 0, 0, 1]]
         )
 
-        # Transform points to 2D screen space
-        vertices = transform_points(point, screen_matrix)
+        perVertex = False
+        if type(colors) == list and len(colors) != 0:
+            perVertex = True
 
-        # Iterate through each triangle (6 values per triangle)
-        for i in range(0, len(vertices), 6):
-            p1 = [vertices[i], vertices[i + 1]]
-            p2 = [vertices[i + 2], vertices[i + 3]]
-            p3 = [vertices[i + 4], vertices[i + 5]]
+        triangleSet3D_input = []
+        tex_coords = GL.current_tex_coords
 
-            # Compute bounding box for the triangle
-            x_min, x_max = int(min(p1[0], p2[0], p3[0])), int(max(p1[0], p2[0], p3[0]))
-            y_min, y_max = int(min(p1[1], p2[1], p3[1])), int(max(p1[1], p2[1], p3[1]))
+        while point:
+            X, Y, Z = point.pop(0), point.pop(0), point.pop(0)
+            p = np.array([X, Y, Z, 1.0])
 
-            # Clamp bounding box to screen dimensions
-            x_min = max(0, x_min)
-            x_max = min(GL.width - 1, x_max)
-            y_min = max(0, y_min)
-            y_max = min(GL.height - 1, y_max)
+            p_transformed = GL.perspective_matrix @ GL.transform_stack[-1] @ p
 
-            # Fill the triangle by iterating over the bounding box
-            for x in range(x_min, x_max + 1):
-                for y in range(y_min, y_max + 1):
-                    if insideTri(x + 0.5, y + 0.5, p1, p2, p3):
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, color)
+            triangleSet3D_input.extend([p_transformed[0]])
+            triangleSet3D_input.extend([p_transformed[1]])
+            triangleSet3D_input.extend([p_transformed[2]])
+            triangleSet3D_input.extend([p_transformed[3]])
+
+        def barycentric_coords(x, y, v0, v1, v2):
+            denom = (v1[1] - v2[1]) * (v0[0] - v2[0]) + (v2[0] - v1[0]) * (
+                v0[1] - v2[1]
+            )
+            w1 = ((v1[1] - v2[1]) * (x - v2[0]) + (v2[0] - v1[0]) * (y - v2[1])) / denom
+            w2 = ((v2[1] - v0[1]) * (x - v2[0]) + (v0[0] - v2[0]) * (y - v2[1])) / denom
+            w3 = 1 - w1 - w2
+            return w1, w2, w3
+
+        for i in range(0, len(triangleSet3D_input), 12):
+            v0 = triangleSet3D_input[i : i + 4]
+            v1 = triangleSet3D_input[i + 4 : i + 8]
+            v2 = triangleSet3D_input[i + 8 : i + 12]
+
+            v0_proj = v0[:3] / v0[3]
+            v1_proj = v1[:3] / v1[3]
+            v2_proj = v2[:3] / v2[3]
+
+            v0_proj = screen_matrix @ np.append(v0_proj, 1)
+            v1_proj = screen_matrix @ np.append(v1_proj, 1)
+            v2_proj = screen_matrix @ np.append(v2_proj, 1)
+
+            if type(GL.current_texture) != None and len(GL.current_tex_coords) != 0:
+                t0 = tex_coords[(i // 12) * 6 : (i // 12) * 6 + 2]
+                t1 = tex_coords[(i // 12) * 6 + 2 : (i // 12) * 6 + 4]
+                t2 = tex_coords[(i // 12) * 6 + 4 : (i // 12) * 6 + 6]
+
+            min_x = int(min(v0_proj[0], v1_proj[0], v2_proj[0]))
+            max_x = int(max(v0_proj[0], v1_proj[0], v2_proj[0]))
+            min_y = int(min(v0_proj[1], v1_proj[1], v2_proj[1]))
+            max_y = int(max(v0_proj[1], v1_proj[1], v2_proj[1]))
+
+            if perVertex:
+                v0_r = colors.pop(0)
+                v0_g = colors.pop(0)
+                v0_b = colors.pop(0)
+                v1_r = colors.pop(0)
+                v1_g = colors.pop(0)
+                v1_b = colors.pop(0)
+                v2_r = colors.pop(0)
+                v2_g = colors.pop(0)
+                v2_b = colors.pop(0)
+                transp = 0.0
+
+            for y in range(min_y, max_y + 1):
+                for x in range(min_x, max_x + 1):
+                    w1, w2, w3 = barycentric_coords(x, y, v0_proj, v1_proj, v2_proj)
+
+                    if w1 >= 0 and w2 >= 0 and w3 >= 0:
+                        z_inv = (w1 / v0[2]) + (w2 / v1[2]) + (w3 / v2[2])
+                        z = 1 / z_inv
+
+                        if perVertex:
+                            color_r = (
+                                w1 * v0_r / v0[2]
+                                + w2 * v1_r / v1[2]
+                                + w3 * v2_r / v2[2]
+                            ) * z
+                            color_g = (
+                                w1 * v0_g / v0[2]
+                                + w2 * v1_g / v1[2]
+                                + w3 * v2_g / v2[2]
+                            ) * z
+                            color_b = (
+                                w1 * v0_b / v0[2]
+                                + w2 * v1_b / v1[2]
+                                + w3 * v2_b / v2[2]
+                            ) * z
+                            color = [color_r, color_g, color_b]
+                        elif (
+                            type(GL.current_texture) != None
+                            and len(GL.current_tex_coords) != 0
+                        ):
+                            v = (
+                                w1 * t0[0] / v0[2]
+                                + w2 * t1[0] / v1[2]
+                                + w3 * t2[0] / v2[2]
+                            ) * z
+                            u = (
+                                -(
+                                    w1 * t0[1] / v0[2]
+                                    + w2 * t1[1] / v1[2]
+                                    + w3 * t2[1] / v2[2]
+                                )
+                                * z
+                            )
+                            level = GL.calculate_mipmap_level(
+                                v0, v1, v2, t0, t1, t2, GL.current_texture
+                            )
+                            r, g, b, _ = GL.get_texture_color(
+                                GL.current_texture, u, v, level
+                            )
+                            color = [r, g, b]
+                            transp = 0.0
+                        else:
+                            transp = colors["transparency"]
+                            color = colors["emissiveColor"]
+
+                        GL.draw_pixel([x, y], z, [int(c * 255) for c in color], transp)
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -532,41 +660,61 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
 
-        def split_faces(indices):
-            """Splits the index list into separate faces based on the `-1` delimiter."""
-            faces = []
-            current_face = []
+        if current_texture:
+            GL.current_texture = gpu.GPU.load_texture(current_texture[0])
 
-            for i in indices:
-                if i == -1:
-                    if current_face:
-                        faces.append(current_face)
-                    current_face = []
-                else:
-                    current_face.append(i)
+        triangles = []
+        triangle_colors = []
+        new_points = [
+            [coord[i], coord[i + 1], coord[i + 2]] for i in range(0, len(coord), 3)
+        ]
 
-            if current_face:
-                faces.append(current_face)
+        def add_texture_coordinates(i):
+            t1 = texCoordIndex[i]
+            t2 = texCoordIndex[i + 1]
+            t3 = texCoordIndex[i + 2]
+            GL.current_tex_coords.extend(
+                [
+                    texCoord[t1 * 2],
+                    texCoord[t1 * 2 + 1],
+                    texCoord[t2 * 2],
+                    texCoord[t2 * 2 + 1],
+                    texCoord[t3 * 2],
+                    texCoord[t3 * 2 + 1],
+                ]
+            )
 
-            return faces
+        def add_vertex_colors(i):
+            c1 = color[colorIndex[i] * 3 : colorIndex[i] * 3 + 3]
+            c2 = color[colorIndex[i + 1] * 3 : colorIndex[i + 1] * 3 + 3]
+            c3 = color[colorIndex[i + 2] * 3 : colorIndex[i + 2] * 3 + 3]
+            triangle_colors.extend(c1 + c2 + c3)
 
-        def generate_strips(faces):
-            """Generates triangle strips from a list of faces."""
-            strips = []
+        i = 0
+        while i < len(coordIndex) - 2:
+            if coordIndex[i] == -1:
+                i += 1
+                continue
 
-            for face in faces:
-                if len(face) >= 3:
-                    strips.extend(
-                        [face[0], face[i], face[i + 1], -1]
-                        for i in range(1, len(face) - 1)
-                    )
+            if coordIndex[i + 1] == -1 or coordIndex[i + 2] == -1:
+                i += 1
+                continue
 
-            return [index for strip in strips for index in strip]
+            v1, v2, v3 = coordIndex[i], coordIndex[i + 1], coordIndex[i + 2]
 
-        faces = split_faces(coordIndex)
-        strip_indices = generate_strips(faces)
+            triangles.extend(new_points[v1] + new_points[v2] + new_points[v3])
 
-        GL.indexedTriangleStripSet(coord, strip_indices, colors)
+            if colorPerVertex and color and colorIndex:
+                add_vertex_colors(i)
+            elif texCoord and texCoordIndex:
+                add_texture_coordinates(i)
+            else:
+                emissiveColor = colors["emissiveColor"]
+                triangle_colors.extend(emissiveColor * 3)
+
+            i += 1
+
+        GL.triangleSet(triangles, triangle_colors)
 
     @staticmethod
     def box(size, colors):
@@ -614,9 +762,13 @@ class GL:
         # encontre os vértices e defina os triângulos.
 
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Cone : bottomRadius = {0}".format(bottomRadius)) # imprime no terminal o raio da base do cone
-        print("Cone : height = {0}".format(height)) # imprime no terminal a altura do cone
-        print("Cone : colors = {0}".format(colors)) # imprime no terminal as cores
+        print(
+            "Cone : bottomRadius = {0}".format(bottomRadius)
+        )  # imprime no terminal o raio da base do cone
+        print(
+            "Cone : height = {0}".format(height)
+        )  # imprime no terminal a altura do cone
+        print("Cone : colors = {0}".format(colors))  # imprime no terminal as cores
 
     @staticmethod
     def cylinder(radius, height, colors):
@@ -630,9 +782,13 @@ class GL:
         # encontre os vértices e defina os triângulos.
 
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Cylinder : radius = {0}".format(radius)) # imprime no terminal o raio do cilindro
-        print("Cylinder : height = {0}".format(height)) # imprime no terminal a altura do cilindro
-        print("Cylinder : colors = {0}".format(colors)) # imprime no terminal as cores
+        print(
+            "Cylinder : radius = {0}".format(radius)
+        )  # imprime no terminal o raio do cilindro
+        print(
+            "Cylinder : height = {0}".format(height)
+        )  # imprime no terminal a altura do cilindro
+        print("Cylinder : colors = {0}".format(colors))  # imprime no terminal as cores
 
     @staticmethod
     def navigationInfo(headlight):
