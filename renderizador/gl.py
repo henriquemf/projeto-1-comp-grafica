@@ -747,7 +747,7 @@ class GL:
         # Desenhar os triângulos com base nas coordenadas e aplicar a cor
         for tri in triangles:
             v1, v2, v3 = vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]
-            gpu.GPU.draw_triangle(v1, v2, v3, colors)
+            GL.triangleSet([v1[0], v1[1], v1[2], v2[0], v2[1], v2[2], v3[0], v3[1], v3[2]], colors)
 
 
     @staticmethod
@@ -784,8 +784,12 @@ class GL:
             for j in range(longitudes):
                 v1 = i * (longitudes + 1) + j
                 v2 = v1 + longitudes + 1
-                gpu.GPU.draw_triangle(vertices[v1], vertices[v2], vertices[v1 + 1], colors)
-                gpu.GPU.draw_triangle(vertices[v1 + 1], vertices[v2], vertices[v2 + 1], colors)
+                GL.triangleSet(
+                    vertices[v1] + vertices[v1 + 1] + vertices[v2], colors
+                )
+                GL.triangleSet(
+                    vertices[v1 + 1] + vertices[v2 + 1] + vertices[v2], colors
+                )
 
 
     @staticmethod
@@ -801,24 +805,28 @@ class GL:
 
         slices = 20
         vertices = []
+
+        # Calcular os vértices da base do cone (movendo para Y = -height/2)
         for i in range(slices):
             theta = i * 2 * math.pi / slices
             x = bottomRadius * math.cos(theta)
             z = bottomRadius * math.sin(theta)
-            vertices.append([x, 0, z])
-        
-        # Desenho da base
+            vertices.append([x, -height / 2, z])  # Centralizando no Y
+
+        # Desenho da base (circular)
         for i in range(slices):
             v1 = vertices[i]
             v2 = vertices[(i + 1) % slices]
-            gpu.GPU.draw_triangle([0, 0, 0], v1, v2, colors)
-        
+            # Triângulo formado pela base
+            GL.triangleSet([0, -height / 2, 0, v1[0], v1[1], v1[2], v2[0], v2[1], v2[2]], colors)
+
         # Desenho das faces laterais
-        top = [0, height, 0]
+        top = [0, height / 2, 0]  # Centralizando o topo no Y
         for i in range(slices):
             v1 = vertices[i]
             v2 = vertices[(i + 1) % slices]
-            gpu.GPU.draw_triangle(v1, v2, top, colors)
+            # Triângulo formado pela face lateral
+            GL.triangleSet([v1[0], v1[1], v1[2], v2[0], v2[1], v2[2], top[0], top[1], top[2]], colors)
 
     @staticmethod
     def cylinder(radius, height, colors):
@@ -834,31 +842,32 @@ class GL:
         slices = 20
         vertices_bottom = []
         vertices_top = []
-        
+
+        # Calcular os vértices da base do cilindro (movendo para Y = -height/2)
         for i in range(slices):
             theta = i * 2 * math.pi / slices
             x = radius * math.cos(theta)
             z = radius * math.sin(theta)
-            vertices_bottom.append([x, 0, z])
-            vertices_top.append([x, height, z])
-        
+            vertices_bottom.append([x, -height / 2, z])  # Centralizando no Y
+            vertices_top.append([x, height / 2, z])      # Topo já centralizado
+
         # Desenho das bases
         for i in range(slices):
             v1 = vertices_bottom[i]
             v2 = vertices_bottom[(i + 1) % slices]
-            gpu.GPU.draw_triangle([0, 0, 0], v1, v2, colors)
+            GL.triangleSet([0, -height / 2, 0, v1[0], v1[1], v1[2], v2[0], v2[1], v2[2]], colors)  # Base inferior
             v1_top = vertices_top[i]
             v2_top = vertices_top[(i + 1) % slices]
-            gpu.GPU.draw_triangle([0, height, 0], v1_top, v2_top, colors)
-        
+            GL.triangleSet([0, height / 2, 0, v2_top[0], v2_top[1], v2_top[2], v1_top[0], v1_top[1], v1_top[2]], colors)  # Base superior
+
         # Desenho das faces laterais
         for i in range(slices):
             v1_bottom = vertices_bottom[i]
             v2_bottom = vertices_bottom[(i + 1) % slices]
             v1_top = vertices_top[i]
             v2_top = vertices_top[(i + 1) % slices]
-            gpu.GPU.draw_triangle(v1_bottom, v2_bottom, v1_top, colors)
-            gpu.GPU.draw_triangle(v2_bottom, v2_top, v1_top, colors)
+            GL.triangleSet(v1_bottom + v2_bottom + v1_top, colors)
+            GL.triangleSet(v1_top + v2_bottom + v2_top, colors)
 
     @staticmethod
     def navigationInfo(headlight):
@@ -870,10 +879,19 @@ class GL:
         # A luz headlight deve ser direcional, ter intensidade = 1, cor = (1 1 1),
         # ambientIntensity = 0,0 e direção = (0 0 −1).
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print(
-            "NavigationInfo : headlight = {0}".format(headlight)
-        )  # imprime no terminal
+        # Define as propriedades da luz direcional
+        if headlight:
+            direction = [0, 0, -1]  # Direção da luz
+            intensity = 1
+            color = [1, 1, 1]  # Cor da luz
+            ambientIntensity = 0
+
+            # Aqui você pode adicionar a lógica para ativar a luz
+            # Por exemplo, GL.setHeadlight(intensity, color, ambientIntensity, direction)
+
+            print(f"Headlight activated with direction {direction}, intensity {intensity}, color {color}, ambientIntensity {ambientIntensity}")
+        else:
+            print("Headlight is off.")
 
     @staticmethod
     def directionalLight(ambientIntensity, color, intensity, direction):
@@ -967,16 +985,27 @@ class GL:
         # como fechada, com uma transições da última chave para a primeira chave. Se os keyValues
         # na primeira e na última chave não forem idênticos, o campo closed será ignorado.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("SplinePositionInterpolator : set_fraction = {0}".format(set_fraction))
-        print(
-            "SplinePositionInterpolator : key = {0}".format(key)
-        )  # imprime no terminal
-        print("SplinePositionInterpolator : keyValue = {0}".format(keyValue))
-        print("SplinePositionInterpolator : closed = {0}".format(closed))
+        num_keys = len(keyValue) // 3  # Cada vetor tem 3 componentes (x, y, z)
+        index = 0
 
-        # Abaixo está só um exemplo de como os dados podem ser calculados e transferidos
-        value_changed = [0.0, 0.0, 0.0]
+        # Encontrar o índice do quadro-chave
+        for i in range(len(key) - 1):
+            if set_fraction >= key[i] and set_fraction <= key[i + 1]:
+                index = i
+                break
+
+        # Interpolação linear entre os dois vetores chave
+        t = (set_fraction - key[index]) / (key[index + 1] - key[index]) if key[index + 1] != key[index] else 0
+
+        p0 = keyValue[index * 3:index * 3 + 3]  # Primeiro vetor
+        p1 = keyValue[(index + 1) * 3:(index + 1) * 3 + 3]  # Segundo vetor
+
+        # Calcular o vetor interpolado
+        value_changed = [
+            (1 - t) * p0[0] + t * p1[0],
+            (1 - t) * p0[1] + t * p1[1],
+            (1 - t) * p0[2] + t * p1[2],
+        ]
 
         return value_changed
 
@@ -995,13 +1024,42 @@ class GL:
         # zeroa a um. O campo keyValue deve conter exatamente tantas rotações 3D quanto os
         # quadros-chave no key.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("OrientationInterpolator : set_fraction = {0}".format(set_fraction))
-        print("OrientationInterpolator : key = {0}".format(key))  # imprime no terminal
-        print("OrientationInterpolator : keyValue = {0}".format(keyValue))
+        num_keys = len(keyValue) // 4  # Cada orientação tem 4 componentes (x, y, z, w)
+        index = 0
 
-        # Abaixo está só um exemplo de como os dados podem ser calculados e transferidos
-        value_changed = [0, 0, 1, 0]
+        # Encontrar o índice do quadro-chave
+        for i in range(len(key) - 1):
+            if set_fraction >= key[i] and set_fraction <= key[i + 1]:
+                index = i
+                break
+
+        # Interpolação linear entre as duas orientações
+        t = (set_fraction - key[index]) / (key[index + 1] - key[index]) if key[index + 1] != key[index] else 0
+
+        q0 = keyValue[index * 4:index * 4 + 4]  # Primeira orientação
+        q1 = keyValue[(index + 1) * 4:(index + 1) * 4 + 4]  # Segunda orientação
+
+        # Interpolação esférica (Slerp)
+        dot_product = sum(q0[i] * q1[i] for i in range(4))
+        if dot_product < 0:
+            q1 = [-x for x in q1]
+            dot_product = -dot_product
+
+        if dot_product > 0.9995:
+            # Se as orientações são quase iguais, faça uma interpolação linear
+            value_changed = [(1 - t) * q0[i] + t * q1[i] for i in range(4)]
+        else:
+            # Slerp
+            theta_0 = math.acos(dot_product)  # Ângulo entre as orientações
+            theta = theta_0 * t
+            sin_theta = math.sin(theta)
+
+            s0 = math.cos(theta) - dot_product * sin_theta / math.sin(theta_0)
+            s1 = sin_theta / math.sin(theta_0)
+
+            value_changed = [
+                s0 * q0[i] + s1 * q1[i] for i in range(4)
+            ]
 
         return value_changed
 

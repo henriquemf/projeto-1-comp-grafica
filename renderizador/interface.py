@@ -19,7 +19,6 @@ from matplotlib.widgets import Button, TextBox, CheckButtons
 import matplotlib.animation as animation
 import matplotlib.patheffects as path_effects
 
-
 class Interface:
     """Interface para usuário/desenvolvedor verificar resultados da renderização."""
     pontos = []        # pontos a serem desenhados
