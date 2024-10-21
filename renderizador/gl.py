@@ -393,8 +393,7 @@ class GL:
                 normal_matrix = np.linalg.inv(model_view_matrix[:3, :3]).T
                 normal_eye = normal_matrix @ normal_obj
                 normal_eye = normal_eye / np.linalg.norm(normal_eye)
-
-                normals_eye_space.append(normal_eye)
+                normals_eye_space.append(normal_eye.copy())
 
             min_x = int(min(v0_proj[0], v1_proj[0], v2_proj[0]))
             max_x = int(max(v0_proj[0], v1_proj[0], v2_proj[0]))
@@ -559,9 +558,9 @@ class GL:
         GL.perspective_matrix = perspective_m @ look_at_matrix
 
         # Optionally print matrices for debugging
-        print("LookAt Matrix:\n", look_at_matrix)
-        print("Perspective Matrix:\n", perspective_m)
-        print("Combined Matrix:\n", GL.perspective_matrix)
+        # print("LookAt Matrix:\n", look_at_matrix)
+        # print("Perspective Matrix:\n", perspective_m)
+        # print("Combined Matrix:\n", GL.perspective_matrix)
 
     @staticmethod
     def transform_in(translation, scale, rotation):
@@ -1144,8 +1143,6 @@ class GL:
             value_changed = [
                 s0 * q0[i] + s1 * q1[i] for i in range(4)
             ]
-
-        print(value_changed)
 
         return value_changed
 
