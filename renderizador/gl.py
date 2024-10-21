@@ -95,6 +95,59 @@ class GL:
         GL.far = far
 
     @staticmethod
+    def applyLighting(normal, viewDir, colors):
+        """Aplica o modelo de iluminação Phong com correções."""
+        light = GL.directional_light
+
+        # Verificar se 'direction' está presente e se a direção não é nula
+        lightDir = light.get('direction')
+        if lightDir is None or np.linalg.norm(lightDir) == 0:
+            return colors.get('emissiveColor', [0, 0, 0])
+
+        lightDir = lightDir / np.linalg.norm(lightDir)
+
+        # Obter propriedades do material
+        ambientColor = np.array(colors.get('ambientColor', [0.2, 0.2, 0.2]))
+        diffuseColor = np.array(colors.get('diffuseColor', [0.8, 0.8, 0.8]))
+        specularColor = np.array(colors.get('specularColor', [0.0, 0.0, 0.0]))
+        shininess = colors.get('shininess', 32.0)
+
+        # Normalizar os vetores
+        normal = normal / np.linalg.norm(normal) if np.linalg.norm(normal) > 0 else np.array([0.0, 0.0, 0.0])
+        viewDir = viewDir / np.linalg.norm(viewDir) if np.linalg.norm(viewDir) > 0 else np.array([0.0, 0.0, 0.0])
+
+        # Calcular o componente difuso
+        diff = np.dot(normal, lightDir)
+        if diff < 0.0:
+            normal = -normal  # Inverter a normal se necessário
+            diff = max(np.dot(normal, lightDir), 0.0)
+        else:
+            diff = max(diff, 0.0)
+
+        # Componente ambiente
+        ambientIntensity = light.get('ambientIntensity', 0.0)
+        intensity = light.get('intensity', 1.0)
+        lightColor = np.array(light['color'])
+
+        ambient = ambientIntensity * lightColor * ambientColor
+
+        # Componente difusa
+        diffuse = diff * intensity * lightColor * diffuseColor
+
+        # Componente especular
+        reflectDir = 2.0 * diff * normal - lightDir
+        reflectDir = reflectDir / np.linalg.norm(reflectDir) if np.linalg.norm(reflectDir) > 0 else np.zeros_like(reflectDir)
+
+        spec_angle = max(np.dot(viewDir, reflectDir), 0.0)
+        specular = (spec_angle ** shininess) * intensity * lightColor * specularColor
+
+        # Cor final
+        finalColor = ambient + diffuse + specular
+        finalColor = np.clip(finalColor, 0, 1)
+
+        return finalColor.tolist()
+    
+    @staticmethod
     def polypoint2D(point, colors):
         """Função usada para renderizar Polypoint2D."""
         # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#Polypoint2D
@@ -236,7 +289,7 @@ class GL:
 
                     for x in range(x_start, x_end + 1):
                         if 0 <= x < ss_width and 0 <= y < ss_height:
-                            ss_framebuffer[y, x] = colors["emissiveColor"]
+                            ss_framebuffer[y, x] = colors['emissiveColor']
 
         for y in range(GL.height):
             for x in range(GL.width):
@@ -279,11 +332,20 @@ class GL:
         triangleSet3D_input = []
         tex_coords = GL.current_tex_coords
 
+        positions_obj_space = []
+        positions_eye_space = []
+        normals_eye_space = []
+
         while point:
             X, Y, Z = point.pop(0), point.pop(0), point.pop(0)
             p = np.array([X, Y, Z, 1.0])
 
+            positions_obj_space.append(p.copy())
+
             p_transformed = GL.perspective_matrix @ GL.transform_stack[-1] @ p
+
+            p_eye = GL.view_matrix @ GL.transform_stack[-1] @ p
+            positions_eye_space.append(p_eye.copy())
 
             triangleSet3D_input.extend([p_transformed[0]])
             triangleSet3D_input.extend([p_transformed[1]])
@@ -316,6 +378,23 @@ class GL:
                 t0 = tex_coords[(i // 12) * 6 : (i // 12) * 6 + 2]
                 t1 = tex_coords[(i // 12) * 6 + 2 : (i // 12) * 6 + 4]
                 t2 = tex_coords[(i // 12) * 6 + 4 : (i // 12) * 6 + 6]
+
+            if hasattr(GL, 'directional_light'):
+                p0_obj = positions_obj_space[i // 4]
+                p1_obj = positions_obj_space[(i // 4) + 1]
+                p2_obj = positions_obj_space[(i // 4) + 2]
+
+                edge1 = p1_obj[:3] - p0_obj[:3]
+                edge2 = p2_obj[:3] - p0_obj[:3]
+                normal_obj = np.cross(edge1, edge2)
+                normal_obj = normal_obj / np.linalg.norm(normal_obj)
+
+                model_view_matrix = GL.view_matrix @ GL.transform_stack[-1]
+                normal_matrix = np.linalg.inv(model_view_matrix[:3, :3]).T
+                normal_eye = normal_matrix @ normal_obj
+                normal_eye = normal_eye / np.linalg.norm(normal_eye)
+
+                normals_eye_space.append(normal_eye)
 
             min_x = int(min(v0_proj[0], v1_proj[0], v2_proj[0]))
             max_x = int(max(v0_proj[0], v1_proj[0], v2_proj[0]))
@@ -383,6 +462,20 @@ class GL:
                                 GL.current_texture, u, v, level
                             )
                             color = [r, g, b]
+                            transp = 0.0
+                        elif hasattr(GL, 'directional_light'):
+                            p0_eye = positions_eye_space[i // 4]
+                            p1_eye = positions_eye_space[(i // 4) + 1]
+                            p2_eye = positions_eye_space[(i // 4) + 2]
+                            position_eye = (w1 * p0_eye[:3] + w2 * p1_eye[:3] + w3 * p2_eye[:3])
+
+                            GL.position_eye = position_eye.copy()
+
+                            viewDir = -position_eye
+                            viewDir = viewDir / np.linalg.norm(viewDir)
+
+                            normal = normals_eye_space[i // 12]
+                            color = GL.applyLighting(normal, viewDir, colors)
                             transp = 0.0
                         else:
                             transp = colors["transparency"]
@@ -610,23 +703,6 @@ class GL:
             idx += 1
 
     @staticmethod
-    def box(size, colors):
-        """Função usada para renderizar Boxes."""
-        # A função box é usada para desenhar paralelepípedos na cena. O Box é centrada no
-        # (0, 0, 0) no sistema de coordenadas local e alinhado com os eixos de coordenadas
-        # locais. O argumento size especifica as extensões da caixa ao longo dos eixos X, Y
-        # e Z, respectivamente, e cada valor do tamanho deve ser maior que zero. Para desenha
-        # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
-        # encontre os vértices e defina os triângulos.
-
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Box : size = {0}".format(size))  # imprime no terminal pontos
-        print("Box : colors = {0}".format(colors))  # imprime no terminal as cores
-
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
-
-    @staticmethod
     def indexedFaceSet(
         coord,
         coordIndex,
@@ -727,21 +803,21 @@ class GL:
         # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # Vértices da caixa em torno da origem (0, 0, 0)
+         # Vértices da caixa em torno da origem (0, 0, 0)
         x, y, z = size[0] / 2, size[1] / 2, size[2] / 2
         vertices = [
+            [-x, -y, z], [x, -y, z], [x, y, z], [-x, y, z],      # Face da frente
             [-x, -y, -z], [x, -y, -z], [x, y, -z], [-x, y, -z],  # Face de trás
-            [-x, -y, z], [x, -y, z], [x, y, z], [-x, y, z],  # Face da frente
         ]
         
         # Triângulos para a face de trás
         triangles = [
             [0, 1, 2], [0, 2, 3],  # Face de trás
-            [4, 5, 6], [4, 6, 7],  # Face da frente
-            [0, 1, 5], [0, 5, 4],  # Lado inferior
-            [2, 3, 7], [2, 7, 6],  # Lado superior
-            [0, 3, 7], [0, 7, 4],  # Lado esquerdo
-            [1, 2, 6], [1, 6, 5],  # Lado direito
+            [4, 6, 5], [4, 7, 6],  # Face da frente
+            [3, 2, 6], [3, 6, 7],  # Lado inferior
+            [0, 4, 1], [1, 4, 5],  # Lado superior
+            [1, 5, 2], [2, 5, 6],  # Lado esquerdo
+            [0, 3, 7], [0, 7, 4]   # Lado direito
         ]
         
         # Desenhar os triângulos com base nas coordenadas e aplicar a cor
@@ -760,36 +836,49 @@ class GL:
         # precisar tesselar ela em triângulos, para isso encontre os vértices e defina
         # os triângulos.
 
-        latitudes = 20
-        longitudes = 20
+        latitudes = 80
+        longitudes = 80
         vertices = []
+        normals = []
+        indices = []
         
+        # Geração de vértices e normais
         for i in range(latitudes + 1):
-            theta = i * math.pi / latitudes
+            theta = i * math.pi / latitudes  # Ângulo polar
             sin_theta = math.sin(theta)
             cos_theta = math.cos(theta)
             
             for j in range(longitudes + 1):
-                phi = j * 2 * math.pi / longitudes
+                phi = j * 2 * math.pi / longitudes  # Ângulo azimutal
                 sin_phi = math.sin(phi)
                 cos_phi = math.cos(phi)
                 
+                # Coordenadas cartesianas
                 x = cos_phi * sin_theta
                 y = cos_theta
                 z = sin_phi * sin_theta
+                
+                # Adiciona vértices e normais
                 vertices.append([radius * x, radius * y, radius * z])
-        
+                normals.append([x, y, z])  # Normais são os mesmos que as coordenadas
+
         # Tesselação dos triângulos da esfera
         for i in range(latitudes):
             for j in range(longitudes):
                 v1 = i * (longitudes + 1) + j
                 v2 = v1 + longitudes + 1
-                GL.triangleSet(
-                    vertices[v1] + vertices[v1 + 1] + vertices[v2], colors
-                )
-                GL.triangleSet(
-                    vertices[v1 + 1] + vertices[v2 + 1] + vertices[v2], colors
-                )
+                
+                # Adiciona os índices dos triângulos
+                indices.append((v1, v1 + 1, v2))
+                indices.append((v1 + 1, v2 + 1, v2))
+
+        # Renderiza os triângulos
+        for index in indices:
+            v1, v2, v3 = index
+            # Os vértices são obtidos da lista de vértices
+            GL.triangleSet(
+                vertices[v1] + vertices[v2] + vertices[v3], colors
+            )
 
 
     @staticmethod
@@ -879,19 +968,9 @@ class GL:
         # A luz headlight deve ser direcional, ter intensidade = 1, cor = (1 1 1),
         # ambientIntensity = 0,0 e direção = (0 0 −1).
 
-        # Define as propriedades da luz direcional
+         # Se o headlight estiver ativado, definir uma luz direcional apontando para onde o usuário olha
         if headlight:
-            direction = [0, 0, -1]  # Direção da luz
-            intensity = 1
-            color = [1, 1, 1]  # Cor da luz
-            ambientIntensity = 0
-
-            # Aqui você pode adicionar a lógica para ativar a luz
-            # Por exemplo, GL.setHeadlight(intensity, color, ambientIntensity, direction)
-
-            print(f"Headlight activated with direction {direction}, intensity {intensity}, color {color}, ambientIntensity {ambientIntensity}")
-        else:
-            print("Headlight is off.")
+            GL.directionalLight(0, [1, 1, 1], 1, [0, 0, -1])
 
     @staticmethod
     def directionalLight(ambientIntensity, color, intensity, direction):
@@ -912,6 +991,13 @@ class GL:
         print(
             "DirectionalLight : direction = {0}".format(direction)
         )  # imprime no terminal
+
+        GL.directional_light = {
+            "ambientIntensity": ambientIntensity,
+            "color": np.array(color),
+            "intensity": intensity,
+            "direction": direction,
+        }
 
     @staticmethod
     def pointLight(ambientIntensity, color, intensity, location):
@@ -985,7 +1071,6 @@ class GL:
         # como fechada, com uma transições da última chave para a primeira chave. Se os keyValues
         # na primeira e na última chave não forem idênticos, o campo closed será ignorado.
 
-        num_keys = len(keyValue) // 3  # Cada vetor tem 3 componentes (x, y, z)
         index = 0
 
         # Encontrar o índice do quadro-chave
@@ -1024,7 +1109,6 @@ class GL:
         # zeroa a um. O campo keyValue deve conter exatamente tantas rotações 3D quanto os
         # quadros-chave no key.
 
-        num_keys = len(keyValue) // 4  # Cada orientação tem 4 componentes (x, y, z, w)
         index = 0
 
         # Encontrar o índice do quadro-chave
@@ -1060,6 +1144,8 @@ class GL:
             value_changed = [
                 s0 * q0[i] + s1 * q1[i] for i in range(4)
             ]
+
+        print(value_changed)
 
         return value_changed
 
