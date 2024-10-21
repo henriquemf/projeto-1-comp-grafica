@@ -727,12 +727,28 @@ class GL:
         # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Box : size = {0}".format(size))  # imprime no terminal pontos
-        print("Box : colors = {0}".format(colors))  # imprime no terminal as cores
+        # Vértices da caixa em torno da origem (0, 0, 0)
+        x, y, z = size[0] / 2, size[1] / 2, size[2] / 2
+        vertices = [
+            [-x, -y, -z], [x, -y, -z], [x, y, -z], [-x, y, -z],  # Face de trás
+            [-x, -y, z], [x, -y, z], [x, y, z], [-x, y, z],  # Face da frente
+        ]
+        
+        # Triângulos para a face de trás
+        triangles = [
+            [0, 1, 2], [0, 2, 3],  # Face de trás
+            [4, 5, 6], [4, 6, 7],  # Face da frente
+            [0, 1, 5], [0, 5, 4],  # Lado inferior
+            [2, 3, 7], [2, 7, 6],  # Lado superior
+            [0, 3, 7], [0, 7, 4],  # Lado esquerdo
+            [1, 2, 6], [1, 6, 5],  # Lado direito
+        ]
+        
+        # Desenhar os triângulos com base nas coordenadas e aplicar a cor
+        for tri in triangles:
+            v1, v2, v3 = vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]
+            gpu.GPU.draw_triangle(v1, v2, v3, colors)
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
 
     @staticmethod
     def sphere(radius, colors):
@@ -744,11 +760,33 @@ class GL:
         # precisar tesselar ela em triângulos, para isso encontre os vértices e defina
         # os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print(
-            "Sphere : radius = {0}".format(radius)
-        )  # imprime no terminal o raio da esfera
-        print("Sphere : colors = {0}".format(colors))  # imprime no terminal as cores
+        latitudes = 20
+        longitudes = 20
+        vertices = []
+        
+        for i in range(latitudes + 1):
+            theta = i * math.pi / latitudes
+            sin_theta = math.sin(theta)
+            cos_theta = math.cos(theta)
+            
+            for j in range(longitudes + 1):
+                phi = j * 2 * math.pi / longitudes
+                sin_phi = math.sin(phi)
+                cos_phi = math.cos(phi)
+                
+                x = cos_phi * sin_theta
+                y = cos_theta
+                z = sin_phi * sin_theta
+                vertices.append([radius * x, radius * y, radius * z])
+        
+        # Tesselação dos triângulos da esfera
+        for i in range(latitudes):
+            for j in range(longitudes):
+                v1 = i * (longitudes + 1) + j
+                v2 = v1 + longitudes + 1
+                gpu.GPU.draw_triangle(vertices[v1], vertices[v2], vertices[v1 + 1], colors)
+                gpu.GPU.draw_triangle(vertices[v1 + 1], vertices[v2], vertices[v2 + 1], colors)
+
 
     @staticmethod
     def cone(bottomRadius, height, colors):
@@ -761,14 +799,26 @@ class GL:
         # Para desenha esse cone você vai precisar tesselar ele em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print(
-            "Cone : bottomRadius = {0}".format(bottomRadius)
-        )  # imprime no terminal o raio da base do cone
-        print(
-            "Cone : height = {0}".format(height)
-        )  # imprime no terminal a altura do cone
-        print("Cone : colors = {0}".format(colors))  # imprime no terminal as cores
+        slices = 20
+        vertices = []
+        for i in range(slices):
+            theta = i * 2 * math.pi / slices
+            x = bottomRadius * math.cos(theta)
+            z = bottomRadius * math.sin(theta)
+            vertices.append([x, 0, z])
+        
+        # Desenho da base
+        for i in range(slices):
+            v1 = vertices[i]
+            v2 = vertices[(i + 1) % slices]
+            gpu.GPU.draw_triangle([0, 0, 0], v1, v2, colors)
+        
+        # Desenho das faces laterais
+        top = [0, height, 0]
+        for i in range(slices):
+            v1 = vertices[i]
+            v2 = vertices[(i + 1) % slices]
+            gpu.GPU.draw_triangle(v1, v2, top, colors)
 
     @staticmethod
     def cylinder(radius, height, colors):
@@ -781,14 +831,34 @@ class GL:
         # Para desenha esse cilindro você vai precisar tesselar ele em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print(
-            "Cylinder : radius = {0}".format(radius)
-        )  # imprime no terminal o raio do cilindro
-        print(
-            "Cylinder : height = {0}".format(height)
-        )  # imprime no terminal a altura do cilindro
-        print("Cylinder : colors = {0}".format(colors))  # imprime no terminal as cores
+        slices = 20
+        vertices_bottom = []
+        vertices_top = []
+        
+        for i in range(slices):
+            theta = i * 2 * math.pi / slices
+            x = radius * math.cos(theta)
+            z = radius * math.sin(theta)
+            vertices_bottom.append([x, 0, z])
+            vertices_top.append([x, height, z])
+        
+        # Desenho das bases
+        for i in range(slices):
+            v1 = vertices_bottom[i]
+            v2 = vertices_bottom[(i + 1) % slices]
+            gpu.GPU.draw_triangle([0, 0, 0], v1, v2, colors)
+            v1_top = vertices_top[i]
+            v2_top = vertices_top[(i + 1) % slices]
+            gpu.GPU.draw_triangle([0, height, 0], v1_top, v2_top, colors)
+        
+        # Desenho das faces laterais
+        for i in range(slices):
+            v1_bottom = vertices_bottom[i]
+            v2_bottom = vertices_bottom[(i + 1) % slices]
+            v1_top = vertices_top[i]
+            v2_top = vertices_top[(i + 1) % slices]
+            gpu.GPU.draw_triangle(v1_bottom, v2_bottom, v1_top, colors)
+            gpu.GPU.draw_triangle(v2_bottom, v2_top, v1_top, colors)
 
     @staticmethod
     def navigationInfo(headlight):
